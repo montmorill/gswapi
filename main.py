@@ -1,7 +1,7 @@
 import json
 import re
 from contextlib import asynccontextmanager
-from typing import Literal, Self, override
+from typing import Literal, Self
 
 from bs4 import BeautifulSoup, Tag
 from fastapi import FastAPI
@@ -79,11 +79,11 @@ class Mingju(BaseModel):
     @classmethod
     def from_tag(cls, tag: Tag) -> Self:
         mingju = cls()
-        if content := tag.select_one('a.mingjuContent'):
+        if content := tag.select_one('.mingjuContent'):
             if 'href' in content.attrs and type(content.attrs['href']) == str:
                 mingju.href = content.attrs['href']
             mingju.content = get_text(content)
-        if source := tag.select_one('a.mingjuSource'):
+        if source := tag.select_one('.mingjuSource'):
             if 'href' in source.attrs and type(source.attrs['href']) == str:
                 mingju.source_href = source.attrs['href']
             mingju.source = get_text(source)
@@ -196,7 +196,7 @@ async def search_soup(
 @app.get('/search/shiwen')
 async def search_shiwen(keyword: str, page: int | None = None) -> Page[Shiwen]:
     tag = await search_soup(keyword, 'shiwen', page)
-    result = Page(more=tag.select_one('a.amore') is not None)
+    result = Page(more=tag.select_one('.amore') is not None)
     if zhuanti := tag.select_one(fenlei_selector('zhuanti')):
         result.zhuanti = Zhuanti.from_tag(zhuanti)
     result.data = list(map(Shiwen.from_tag, tag.select('.zongheShiwen')))
@@ -216,7 +216,7 @@ async def search_mingju(keyword: str, page: int | None = None) -> Page[Mingju]:
 @app.get('/search/book')
 async def search_book(keyword: str, page: int | None = None) -> Page[Book]:
     tag = await search_soup(keyword, 'book', page)
-    result = Page(more=tag.select_one('a.amore') is not None)
+    result = Page(more=tag.select_one('.amore') is not None)
     result.data = list(map(Book.from_tag, tag.select('.zongheShiwen')))
     return result
 
@@ -224,6 +224,6 @@ async def search_book(keyword: str, page: int | None = None) -> Page[Book]:
 @app.get('/search/author')
 async def search_author(keyword: str, page: int | None = None) -> Page[Author]:
     tag = await search_soup(keyword, 'author', page)
-    result = Page(more=tag.select_one('a.amore') is not None)
+    result = Page(more=tag.select_one('.amore') is not None)
     result.data = list(map(Author.from_tag, tag.select('.zongheShiwen')))
     return result
