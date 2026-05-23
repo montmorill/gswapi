@@ -22,6 +22,10 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
+def fenlei_selector(fenlei: str) -> str:
+    return f'.main3>.left>div:has(img[src="../img/search/{fenlei}.png"])'
+
+
 def get_text(element):
     parts = []
     for child in element.children:
@@ -112,7 +116,26 @@ class Book(BaseShiwen):
         return book
 
 
+class Zhuanti(BaseModel):
+    href: str | None = None
+    title: str | None = None
+    content: str | None = None
+
+    @classmethod
+    def from_tag(cls, tag: Tag) -> Self:
+        zhuanti = cls()
+        if timu := tag.select_one('.timu'):
+            if (timu.parent and 'href' in timu.parent.attrs
+                    and type(timu.parent.attrs['href']) == str):
+                zhuanti.href = timu.parent.attrs['href']
+            zhuanti.title = get_text(timu)
+        if content := tag.select_one('.content'):
+            zhuanti.content = get_text(content)
+        return zhuanti
+
+
 class Page[T](BaseModel):
+    zhuanti: Zhuanti | None = None
     data: list[T] = Field(default_factory=list)
     more: bool = False
 
@@ -141,6 +164,8 @@ async def search_soup(
 async def search_shiwen(keyword: str, page: int | None = None) -> Page[Shiwen]:
     tag = await search_soup(keyword, 'shiwen', page)
     result = Page(more=tag.select_one('a.amore') is not None)
+    if zhuanti := tag.select_one(fenlei_selector('zhuanti')):
+        result.zhuanti = Zhuanti.from_tag(zhuanti)
     result.data = list(map(Shiwen.from_tag, tag.select('.zongheShiwen')))
     return result
 
@@ -149,6 +174,8 @@ async def search_shiwen(keyword: str, page: int | None = None) -> Page[Shiwen]:
 async def search_mingju(keyword: str, page: int | None = None) -> Page[Mingju]:
     tag = await search_soup(keyword, 'mingju', page)
     result = Page()
+    if zhuanti := tag.select_one(fenlei_selector('zhuanti')):
+        result.zhuanti = Zhuanti.from_tag(zhuanti)
     result.data = list(map(Mingju.from_tag, tag.select('.mingju-item')))
     return result
 
