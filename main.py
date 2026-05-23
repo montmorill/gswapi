@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from httpx import AsyncClient
 
-from search import Search, SearchType
+from search import SearchResult, SearchType
 
 
 @asynccontextmanager
@@ -25,7 +25,6 @@ async def search(
     keyword: str,
     type: SearchType = None,
     page: int | None = None
-) -> Search:
-    result = Search(keyword=keyword, type=type, page=page)
-    await result.search(app.state.client)
-    return result
+) -> SearchResult:
+    result = SearchResult(keyword=keyword, type=type, page=page)
+    return await result.search(app.state.client)

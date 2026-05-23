@@ -154,7 +154,7 @@ class Zhuanti(BaseModel):
 type SearchType = Literal['shiwen', 'mingju', 'book', 'author'] | None
 
 
-class Search(BaseModel):
+class SearchResult(BaseModel):
     keyword: str
     type: SearchType = None
     page: int | None = None
@@ -223,3 +223,4 @@ class Search(BaseModel):
             self.parse_book(soup)
         elif self.type == 'author':
             self.parse_author(soup)
+        return self
