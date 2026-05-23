@@ -212,7 +212,7 @@ class SearchResult(BaseModel):
         if self.type is None:
             for field in ['zhuanti', 'shiwen', 'mingju', 'book', 'author']:
                 if tag := soup.select_one(FENLEI_SELECTOR.format(fenlei=field)):
-                    getattr(self, f'parse_{field}')(tag)
+                    setattr(self, field, getattr(self, f'parse_{field}')(tag))
         elif self.type == 'shiwen':
             self.zhuanti = self.parse_zhuanti(soup)
             self.shiwen = self.parse_shiwen(soup)
