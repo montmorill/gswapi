@@ -172,31 +172,31 @@ class SearchResult(BaseModel):
         )
 
     def parse_zhuanti(self, tag: Tag):
-        self.zhuanti = Page(
+        return Page(
             data=map(Zhuanti.from_tag, tag.select('.zhuanti-item')),
             more=self.parse_more(tag)
         )
 
     def parse_shiwen(self, tag: Tag):
-        self.shiwen = Page(
+        return Page(
             data=map(Shiwen.from_tag, tag.select('.zongheShiwen')),
             more=self.parse_more(tag)
         )
 
     def parse_mingju(self, tag: Tag):
-        self.mingju = Page(
+        return Page(
             data=map(Mingju.from_tag, tag.select('.mingju-item')),
             more=self.parse_more(tag)
         )
 
     def parse_book(self, tag: Tag):
-        self.book = Page(
+        return Page(
             data=map(Book.from_tag, tag.select('.zongheShiwen')),
             more=self.parse_more(tag)
         )
 
     def parse_author(self, tag: Tag):
-        self.author = Page(
+        return Page(
             data=map(Author.from_tag, tag.select('.zongheShiwen')),
             more=self.parse_more(tag)
         )
@@ -214,13 +214,13 @@ class SearchResult(BaseModel):
                 if tag := soup.select_one(FENLEI_SELECTOR.format(fenlei=field)):
                     getattr(self, f'parse_{field}')(tag)
         elif self.type == 'shiwen':
-            self.parse_zhuanti(soup)
-            self.parse_shiwen(soup)
+            self.zhuanti = self.parse_zhuanti(soup)
+            self.shiwen = self.parse_shiwen(soup)
         elif self.type == 'mingju':
-            self.parse_mingju(soup)
-            self.parse_book(soup)
+            self.zhuanti = self.parse_zhuanti(soup)
+            self.mingju = self.parse_mingju(soup)
         elif self.type == 'book':
-            self.parse_book(soup)
+            self.book = self.parse_book(soup)
         elif self.type == 'author':
-            self.parse_author(soup)
+            self.author = self.parse_author(soup)
         return self
