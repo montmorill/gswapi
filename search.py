@@ -20,7 +20,7 @@ def parse_int(text: str) -> int | None:
 
 def get_text(element) -> str:
     if isinstance(element, str):
-        return element
+        return element.strip()
     parts = []
     for child in element.children:
         if child.name == 'br':
