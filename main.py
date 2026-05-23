@@ -114,7 +114,7 @@ class Book(BaseShiwen):
 
 class Page[T](BaseModel):
     data: list[T] = Field(default_factory=list)
-    more: bool
+    more: bool = False
 
 
 def make_params(**kwargs) -> dict:
@@ -140,7 +140,7 @@ async def search_soup(
 @app.get('/search/shiwen')
 async def search_shiwen(keyword: str, page: int | None = None) -> Page[Shiwen]:
     tag = await search_soup(keyword, 'shiwen', page)
-    result = Page(more=tag.select_one('.viewMore') is not None)
+    result = Page(more=tag.select_one('a.amore') is not None)
     result.data = list(map(Shiwen.from_tag, tag.select('.zongheShiwen')))
     return result
 
@@ -148,7 +148,7 @@ async def search_shiwen(keyword: str, page: int | None = None) -> Page[Shiwen]:
 @app.get('/search/mingju')
 async def search_mingju(keyword: str, page: int | None = None) -> Page[Mingju]:
     tag = await search_soup(keyword, 'mingju', page)
-    result = Page(more=tag.select_one('.viewMore') is not None)
+    result = Page()
     result.data = list(map(Mingju.from_tag, tag.select('.mingju-item')))
     return result
 
@@ -156,6 +156,6 @@ async def search_mingju(keyword: str, page: int | None = None) -> Page[Mingju]:
 @app.get('/search/book')
 async def search_book(keyword: str, page: int | None = None) -> Page[Book]:
     tag = await search_soup(keyword, 'book', page)
-    result = Page(more=tag.select_one('.viewMore') is not None)
+    result = Page(more=tag.select_one('a.amore') is not None)
     result.data = list(map(Book.from_tag, tag.select('.zongheShiwen')))
     return result
