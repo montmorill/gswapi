@@ -1,7 +1,7 @@
 import json
 import re
 from contextlib import asynccontextmanager
-from typing import Literal, Self
+from typing import Iterable, Literal, Self
 
 from bs4 import BeautifulSoup, Tag
 from fastapi import FastAPI
@@ -21,10 +21,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
-def fenlei_selector(fenlei: str) -> str:
-    return f'.main3>.left>div:has(img[src="../img/search/{fenlei}.png"])'
-
-
+FENLEI_SELECTOR = '.main3>.left>div:has(img[src="../img/search/{fenlei}.png"])'
 SHIWEN_BEFORE_SELECTOR = 'img[src="../img/book/shiwen.png"]'
 MINGJU_BEFORE_SELECTOR = 'img[src="../img/book/mingjuBefor.png"]'
 
@@ -167,12 +164,6 @@ class Zhuanti(BaseModel):
         return zhuanti
 
 
-class Page[T](BaseModel):
-    zhuanti: Zhuanti | None = None
-    data: list[T] = Field(default_factory=list)
-    more: bool = False
-
-
 def make_params(**kwargs) -> dict:
     return {
         key: value
@@ -181,49 +172,92 @@ def make_params(**kwargs) -> dict:
     }
 
 
-async def search_soup(
+class Page[T](BaseModel):
+    data: Iterable[T] = Field(default_factory=list)
+    more: bool = False
+
+
+type SearchType = Literal['shiwen', 'mingju', 'book', 'author'] | None
+
+
+class Search(BaseModel):
+    keyword: str
+    type: SearchType = None
+    page: int | None = None
+    zhuanti: Page[Zhuanti] | None = None
+    shiwen: Page[Shiwen] | None = None
+    mingju: Page[Mingju] | None = None
+    book: Page[Book] | None = None
+    author: Page[Author] | None = None
+
+    def parse_more(self, tag: Tag) -> bool:
+        return (
+            tag.select_one('.viewMore') is not None
+            if self.type is None else
+            tag.select_one('.amore') is not None
+        )
+
+    def parse_zhuanti(self, tag: Tag):
+        self.zhuanti = Page(
+            data=map(Zhuanti.from_tag, tag.select('.zhuanti-item')),
+            more=self.parse_more(tag)
+        )
+
+    def parse_shiwen(self, tag: Tag):
+        self.shiwen = Page(
+            data=map(Shiwen.from_tag, tag.select('.zongheShiwen')),
+            more=self.parse_more(tag)
+        )
+
+    def parse_mingju(self, tag: Tag):
+        self.mingju = Page(
+            data=map(Mingju.from_tag, tag.select('.mingju-item')),
+            more=self.parse_more(tag)
+        )
+
+    def parse_book(self, tag: Tag):
+        self.book = Page(
+            data=map(Book.from_tag, tag.select('.zongheShiwen')),
+            more=self.parse_more(tag)
+        )
+
+    def parse_author(self, tag: Tag):
+        self.author = Page(
+            data=map(Author.from_tag, tag.select('.zongheShiwen')),
+            more=self.parse_more(tag)
+        )
+
+    async def search(self):
+        client: AsyncClient = app.state.client
+        url = 'https://www.guwendao.net/search.aspx'
+        resp = await client.get(url, params=make_params(
+            value=self.keyword,
+            type=self.type,
+            page=self.page
+        ))
+        soup = BeautifulSoup(resp.text, 'lxml')
+        if self.type is None:
+            for field in ['zhuanti', 'shiwen', 'mingju', 'book', 'author']:
+                if tag := soup.select_one(FENLEI_SELECTOR.format(fenlei=field)):
+                    getattr(self, f'parse_{field}')(tag)
+        elif self.type == 'shiwen':
+            self.parse_zhuanti(soup)
+            self.parse_shiwen(soup)
+        elif self.type == 'mingju':
+            self.parse_mingju(soup)
+            self.parse_book(soup)
+        elif self.type == 'book':
+            self.parse_book(soup)
+        elif self.type == 'author':
+            self.parse_author(soup)
+
+
+@app.get('/search')
+async def search(
     keyword: str,
-        type: Literal['shiwen', 'mingju', 'book', 'author'] | None = None,
-        page: int | None = None
-):
-    client: AsyncClient = app.state.client
-    url = 'https://www.guwendao.net/search.aspx'
-    resp = await client.get(url, params=make_params(value=keyword, type=type, page=page))
-    soup = BeautifulSoup(resp.text, 'lxml')
-    return soup
-
-
-@app.get('/search/shiwen')
-async def search_shiwen(keyword: str, page: int | None = None) -> Page[Shiwen]:
-    tag = await search_soup(keyword, 'shiwen', page)
-    result = Page(more=tag.select_one('.amore') is not None)
-    if zhuanti := tag.select_one(fenlei_selector('zhuanti')):
-        result.zhuanti = Zhuanti.from_tag(zhuanti)
-    result.data = list(map(Shiwen.from_tag, tag.select('.zongheShiwen')))
-    return result
-
-
-@app.get('/search/mingju')
-async def search_mingju(keyword: str, page: int | None = None) -> Page[Mingju]:
-    tag = await search_soup(keyword, 'mingju', page)
-    result = Page()
-    if zhuanti := tag.select_one(fenlei_selector('zhuanti')):
-        result.zhuanti = Zhuanti.from_tag(zhuanti)
-    result.data = list(map(Mingju.from_tag, tag.select('.mingju-item')))
-    return result
-
-
-@app.get('/search/book')
-async def search_book(keyword: str, page: int | None = None) -> Page[Book]:
-    tag = await search_soup(keyword, 'book', page)
-    result = Page(more=tag.select_one('.amore') is not None)
-    result.data = list(map(Book.from_tag, tag.select('.zongheShiwen')))
-    return result
-
-
-@app.get('/search/author')
-async def search_author(keyword: str, page: int | None = None) -> Page[Author]:
-    tag = await search_soup(keyword, 'author', page)
-    result = Page(more=tag.select_one('.amore') is not None)
-    result.data = list(map(Author.from_tag, tag.select('.zongheShiwen')))
+    type: SearchType = None,
+    page: int | None = None
+) -> Search:
+    result = Search(keyword=keyword, type=type, page=page)
+    await result.search()
     return result
