@@ -4,7 +4,6 @@ from contextlib import asynccontextmanager
 from typing import Literal, Self, override
 
 from bs4 import BeautifulSoup, Tag
-from bs4.element import NavigableString
 from fastapi import FastAPI
 from httpx import AsyncClient
 from pydantic import BaseModel, Field
@@ -26,21 +25,32 @@ def fenlei_selector(fenlei: str) -> str:
     return f'.main3>.left>div:has(img[src="../img/search/{fenlei}.png"])'
 
 
-def get_text(element):
+SHIWEN_BEFORE_SELECTOR = 'img[src="../img/book/shiwen.png"]'
+MINGJU_BEFORE_SELECTOR = 'img[src="../img/book/mingjuBefor.png"]'
+
+
+def parse_int(text: str) -> int | None:
+    match = re.match(r'\d+', text)
+    return int(match.group(0)) if match else None
+
+
+def get_text(element) -> str:
+    if isinstance(element, str):
+        return element
     parts = []
     for child in element.children:
-        if isinstance(child, NavigableString):
-            parts.append(child.string)
-        elif child.name == 'br':
+        if child.name == 'br':
             parts.append('\n')
         else:
             parts.append(get_text(child))
     return ''.join(parts).strip()
 
 
-class BaseShiwen(BaseModel):
+class Shiwen(BaseModel):
     href: str | None = None
     title: str | None = None
+    source: str | None = None
+    content: list[str] = Field(default_factory=list)
 
     @classmethod
     def from_tag(cls, tag: Tag) -> Self:
@@ -50,17 +60,6 @@ class BaseShiwen(BaseModel):
                     and type(timu.parent.attrs['href']) == str):
                 shiwen.href = timu.parent.attrs['href']
             shiwen.title = get_text(timu)
-        return shiwen
-
-
-class Shiwen(BaseShiwen):
-    source: str | None = None
-    content: list[str] = Field(default_factory=list)
-
-    @override
-    @classmethod
-    def from_tag(cls, tag: Tag) -> Self:
-        shiwen = super().from_tag(tag)
         if source := tag.select_one('.source'):
             shiwen.source = get_text(source)
         if contson := tag.select_one('.contson'):
@@ -91,29 +90,63 @@ class Mingju(BaseModel):
         return mingju
 
 
-class Book(BaseShiwen):
+class Book(BaseModel):
+    href: str | None = None
+    title: str | None = None
     alias: str | None = None
     mingju_count: int | None = None
     tags: set[str] = Field(default_factory=set)
 
-    @override
     @classmethod
     def from_tag(cls, tag: Tag) -> Self:
-        book = super().from_tag(tag)
+        book = cls()
+        if timu := tag.select_one('.timu'):
+            if (timu.parent and 'href' in timu.parent.attrs
+                    and type(timu.parent.attrs['href']) == str):
+                book.href = timu.parent.attrs['href']
+            book.title = get_text(timu)
         if beiming := tag.select_one('.bieming2'):
             book.alias = get_text(beiming)
-        if (img := tag.select_one('img[src="../img/book/mingjuBefor.png"]')) \
-                and (node := img.parent):
-            if count := re.match(r'\d+', get_text(node)):
-                book.mingju_count = int(count.group(0).strip())
-            if parent := node.parent:
+        if (img := tag.select_one(MINGJU_BEFORE_SELECTOR)) and img.parent:
+            if count := parse_int(mingju_count := get_text(img.parent)):
+                book.mingju_count = count
+            if parent := img.parent.parent:
                 book.tags = set(
                     text
                     for child in parent.children
                     if (text := get_text(child))
-                    and not text == f'{book.mingju_count}条名句'
+                    and not text == mingju_count
                 )
         return book
+
+
+class Author(BaseModel):
+    href: str | None = None
+    name: str | None = None
+    avatar: str | None = None
+    content: str | None = None
+    shiwen_count: int | None = None
+    mingju_count: int | None = None
+
+    @classmethod
+    def from_tag(cls, tag: Tag) -> Self:
+        author = cls()
+        if avatar := tag.select_one('img'):
+            if 'src' in avatar.attrs and type(avatar.attrs['src']) == str:
+                author.avatar = avatar.attrs['src']
+            if 'alt' in avatar.attrs and type(avatar.attrs['alt']) == str:
+                author.name = avatar.attrs['alt']
+            if (a := avatar.parent) and 'href' in a.attrs and type(a.attrs['href']) == str:
+                author.href = a.attrs['href']
+        if (img := tag.select_one(SHIWEN_BEFORE_SELECTOR)):
+            if count := parse_int(get_text(img.parent)):
+                author.shiwen_count = count
+        if (img := tag.select_one(MINGJU_BEFORE_SELECTOR)) and img.parent:
+            if count := parse_int(get_text(img.parent)):
+                author.mingju_count = count
+        if contson := tag.select_one('.contson'):
+            author.content = get_text(contson)
+        return author
 
 
 class Zhuanti(BaseModel):
@@ -185,4 +218,12 @@ async def search_book(keyword: str, page: int | None = None) -> Page[Book]:
     tag = await search_soup(keyword, 'book', page)
     result = Page(more=tag.select_one('a.amore') is not None)
     result.data = list(map(Book.from_tag, tag.select('.zongheShiwen')))
+    return result
+
+
+@app.get('/search/author')
+async def search_author(keyword: str, page: int | None = None) -> Page[Author]:
+    tag = await search_soup(keyword, 'author', page)
+    result = Page(more=tag.select_one('a.amore') is not None)
+    result.data = list(map(Author.from_tag, tag.select('.zongheShiwen')))
     return result
