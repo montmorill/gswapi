@@ -1,33 +1,15 @@
-import re
 from typing import Literal, Self
 
 from bs4 import BeautifulSoup, Tag
 from httpx import AsyncClient
 from pydantic import BaseModel, Field
 
-from utils import Page, make_params
+from utils import Page, make_params, parse_int
 
 
 FENLEI_SELECTOR = '.main3>.left>div:has(img[src="../img/search/{fenlei}.png"])'
 SHIWEN_BEFORE_SELECTOR = 'img[src="../img/book/shiwen.png"]'
 MINGJU_BEFORE_SELECTOR = 'img[src="../img/book/mingjuBefor.png"]'
-
-
-def parse_int(text: str) -> int | None:
-    match = re.match(r'\d+', text)
-    return int(match.group(0)) if match else None
-
-
-def get_text(element) -> str:
-    if isinstance(element, str):
-        return element.strip()
-    parts = []
-    for child in element.children:
-        if child.name == 'br':
-            parts.append('\n')
-        else:
-            parts.append(get_text(child))
-    return ''.join(parts).strip()
 
 
 class Shiwen(BaseModel):
@@ -43,12 +25,12 @@ class Shiwen(BaseModel):
             if (timu.parent and 'href' in timu.parent.attrs
                     and type(timu.parent.attrs['href']) == str):
                 shiwen.href = timu.parent.attrs['href']
-            shiwen.title = get_text(timu)
+            shiwen.title = timu.text.strip()
         if source := tag.select_one('.source'):
-            shiwen.source = get_text(source)
+            shiwen.source = source.text.strip()
         if contson := tag.select_one('.contson'):
             shiwen.content = [
-                get_text(tag)
+                tag.text.strip()
                 for tag in contson.select('p') or [contson]
             ]
         return shiwen
@@ -66,11 +48,11 @@ class Mingju(BaseModel):
         if content := tag.select_one('.mingjuContent'):
             if 'href' in content.attrs and type(content.attrs['href']) == str:
                 mingju.href = content.attrs['href']
-            mingju.content = get_text(content)
+            mingju.content = content.text.strip()
         if source := tag.select_one('.mingjuSource'):
             if 'href' in source.attrs and type(source.attrs['href']) == str:
                 mingju.source_href = source.attrs['href']
-            mingju.source = get_text(source)
+            mingju.source = source.text.strip()
         return mingju
 
 
@@ -88,17 +70,17 @@ class Book(BaseModel):
             if (timu.parent and 'href' in timu.parent.attrs
                     and type(timu.parent.attrs['href']) == str):
                 book.href = timu.parent.attrs['href']
-            book.title = get_text(timu)
+            book.title = timu.text.strip()
         if beiming := tag.select_one('.bieming2'):
-            book.alias = get_text(beiming)
+            book.alias = beiming.text.strip()
         if (img := tag.select_one(MINGJU_BEFORE_SELECTOR)) and img.parent:
-            if count := parse_int(mingju_count := get_text(img.parent)):
+            if count := parse_int(mingju_count := img.parent.text.strip()):
                 book.mingju_count = count
             if parent := img.parent.parent:
                 book.tags = set(
                     text
                     for child in parent.children
-                    if (text := get_text(child))
+                    if (text := child.text.strip())
                     and not text == mingju_count
                 )
         return book
@@ -123,13 +105,13 @@ class Author(BaseModel):
             if (a := avatar.parent) and 'href' in a.attrs and type(a.attrs['href']) == str:
                 author.href = a.attrs['href']
         if (img := tag.select_one(SHIWEN_BEFORE_SELECTOR)):
-            if count := parse_int(get_text(img.parent)):
+            if img.parent and (count := parse_int(img.parent.text.strip())):
                 author.shiwen_count = count
         if (img := tag.select_one(MINGJU_BEFORE_SELECTOR)) and img.parent:
-            if count := parse_int(get_text(img.parent)):
+            if count := parse_int(img.parent.text.strip()):
                 author.mingju_count = count
         if contson := tag.select_one('.contson'):
-            author.content = get_text(contson)
+            author.content = contson.text.strip()
         return author
 
 
@@ -145,9 +127,9 @@ class Zhuanti(BaseModel):
             if (timu.parent and 'href' in timu.parent.attrs
                     and type(timu.parent.attrs['href']) == str):
                 zhuanti.href = timu.parent.attrs['href']
-            zhuanti.title = get_text(timu)
+            zhuanti.title = timu.text.strip()
         if content := tag.select_one('.content'):
-            zhuanti.content = get_text(content)
+            zhuanti.content = content.text.strip()
         return zhuanti
 
 

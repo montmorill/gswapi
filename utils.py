@@ -1,6 +1,12 @@
+import re
 from typing import Iterable
 
 from pydantic import BaseModel, Field
+
+
+def parse_int(text: str) -> int | None:
+    match = re.match(r'\d+', text)
+    return int(match.group(0)) if match else None
 
 
 def make_params(**kwargs) -> dict:
