@@ -12,7 +12,10 @@ async def lifespan(app: FastAPI):
     with open('cookies.json', 'r') as file:
         cookies = json.load(file)
 
-    async with AsyncClient(cookies=cookies) as client:
+    async with AsyncClient(
+        base_url='https://www.guwendao.net',
+        cookies=cookies
+    ) as client:
         app.state.client = client
         yield
 

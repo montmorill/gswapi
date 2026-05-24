@@ -184,8 +184,7 @@ class SearchResult(BaseModel):
         )
 
     async def search(self, client: AsyncClient):
-        url = 'https://www.guwendao.net/search.aspx'
-        resp = await client.get(url, params=make_params(
+        resp = await client.get('/search.aspx', params=make_params(
             value=self.keyword,
             type=self.type,
             page=self.page
