@@ -39,14 +39,10 @@ async def search(
     return SearchResult.from_tag(soup, type=type)
 
 
-@app.get('/zici/search')
-async def zici_search(
-    keyword: str,
-    type: SearchType | None = None,
-    page: int | None = None,
-) -> ZiciSearchResult:
+@app.get('/word/{word}')
+async def word(word: str) -> ZiciSearchResult:
     client: AsyncClient = app.state.client
-    params = make_params(value=keyword)
+    params = make_params(value=word)
     resp = await client.get('/zici/search.aspx', params=params)
     soup = BeautifulSoup(resp.text, 'lxml')
     return ZiciSearchResult.from_tag(soup)
