@@ -33,10 +33,20 @@ async def search(
     page: int | None = None,
 ) -> SearchResult:
     client: AsyncClient = app.state.client
-    resp = await client.get('/search.aspx', params=make_params(
-        value=keyword,
-        type=type,
-        page=page
-    ))
+    params = make_params(value=keyword, type=type, page=page)
+    resp = await client.get('/search.aspx', params=params)
     soup = BeautifulSoup(resp.text, 'lxml')
     return SearchResult.from_tag(soup, type=type)
+
+
+@app.get('/zici/search')
+async def zici_search(
+    keyword: str,
+    type: SearchType | None = None,
+    page: int | None = None,
+) -> ZiciSearchResult:
+    client: AsyncClient = app.state.client
+    params = make_params(value=keyword)
+    resp = await client.get('/zici/search.aspx', params=params)
+    soup = BeautifulSoup(resp.text, 'lxml')
+    return ZiciSearchResult.from_tag(soup)
