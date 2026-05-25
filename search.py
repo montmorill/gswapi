@@ -39,7 +39,7 @@ class Shiwen(BaseModel):
     href: str | None = None
     title: str | None = None
     source: str | None = None
-    content: list[str] = Field(default_factory=list)
+    content: list[str] | None = None
 
     @classmethod
     def from_tag(cls, tag: Tag) -> Self:

@@ -46,6 +46,6 @@ async def zici(word: str) -> ZiciSearchResult:
     resp = await client.get('/zici/search.aspx', params=params)
     soup = BeautifulSoup(resp.text, 'lxml')
     result = ZiciSearchResult.from_tag(soup)
-    if result.name is None:
+    if result.name is None and any(result.__dict__.values()):
         result.name = word
     return result

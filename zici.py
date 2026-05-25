@@ -67,7 +67,7 @@ class ZiciSearchResult(BaseModel):
     name: str | None = None
     pinyin: str | None = None
     info: dict[str, str] = Field(default_factory=dict)
-    data: list[BasicShiyi | DetailShiyi] = Field(default_factory=list)
+    data: list[BasicShiyi | DetailShiyi] | None = None
 
     @classmethod
     def from_tag(cls, tag: Tag) -> Self:
