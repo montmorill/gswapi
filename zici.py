@@ -24,21 +24,21 @@ class Shiyi(BaseModel):
 
 
 class BasicShiyi(Shiyi):
-    extras: dict[str, str] = Field(default_factory=dict)
+    info: dict[str, str] = Field(default_factory=dict)
 
     @classmethod
     def from_tag(cls, tag: Tag) -> Self:
         result = super().from_tag(tag)
         if jinyi := tag.select_one('.jinyi-item .jinyiziContent'):
-            result.extras['近义词'] = jinyi.get_text(strip=True)
+            result.info['近义词'] = jinyi.get_text(strip=True)
         if fanyi := tag.select_one('.fanyi-item .jinyiziContent'):
-            result.extras['反义词'] = fanyi.get_text(strip=True)
+            result.info['反义词'] = fanyi.get_text(strip=True)
         if zuci := tag.select_one('.zuci'):
-            result.extras['组词'] = zuci.get_text().replace(' | ', '、')
+            result.info['组词'] = zuci.get_text().replace(' | ', '、')
         for liju in tag.select('.liju'):
             text = liju.get_text(strip=True)
             key, value = text.split('：')
-            result.extras[key] = value
+            result.info[key] = value
         return result
 
 
@@ -63,6 +63,7 @@ class DetailShiyi(Shiyi):
 class ZiciSearchResult(BaseModel):
     name: str | None = None
     pinyin: str | None = None
+    info: dict[str, str] = Field(default_factory=dict)
     data: list[BasicShiyi | DetailShiyi] = Field(default_factory=list)
 
     @classmethod
@@ -72,6 +73,10 @@ class ZiciSearchResult(BaseModel):
             result.name = cidianNames.get_text(strip=True)
         if pinyinStr := tag.select_one('.pingyinStr'):
             result.pinyin = pinyinStr.get_text(strip=True)
+        for infoItem in tag.select('.infoItem'):
+            if (key := infoItem.select_one('.dinyi')) and\
+                    (value := infoItem.select_one('.dinyiZhi')):
+                result.info[key.text] = value.text
         result.data = [
             DetailShiyi.from_tag(tag)
             if tag.select_one('.yinzheng-item') is not None else
