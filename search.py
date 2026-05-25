@@ -166,11 +166,11 @@ ITEM_TYPE_TO_CLASS: dict[Literal[SearchType, "zhuanti"], type[FromTag]] = {
 
 
 class SearchResult(BaseModel):
-    zhuanti: list[Zhuanti] | None = None
-    shiwen: list[Shiwen] | None = None
-    mingju: list[Mingju] | None = None
-    book: list[Book] | None = None
-    author: list[Author] | None = None
+    zhuantis: list[Zhuanti] | None = None
+    shiwens: list[Shiwen] | None = None
+    mingjus: list[Mingju] | None = None
+    books: list[Book] | None = None
+    authors: list[Author] | None = None
     more: bool = False
 
     @classmethod
@@ -182,9 +182,10 @@ class SearchResult(BaseModel):
                 selector = FENLEI_SELECTOR.format(fenlei=field)
                 if fenlei := tag.select_one(selector):
                     items = parse_tags(ITEM_TYPE_TO_CLASS[field], fenlei)
-                    setattr(result, field, items)
+                    setattr(result, f'{field}s', items)
             return result
-        result.zhuanti = parse_tags(Zhuanti, tag)
-        setattr(result, type, parse_tags(ITEM_TYPE_TO_CLASS[type], tag))
+        if len(zhuantis := parse_tags(Zhuanti, tag)):
+            result.zhuantis = zhuantis
+        setattr(result, f'{type}s', parse_tags(ITEM_TYPE_TO_CLASS[type], tag))
         result.more = tag.select_one('.amore') is not None
         return result
