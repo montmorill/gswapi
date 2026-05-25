@@ -1,20 +1,24 @@
-from typing import Literal, Self
+from functools import partial
+import re
+from typing import ClassVar, Literal, Protocol, Self
 
 from bs4 import BeautifulSoup, Tag
 from httpx import AsyncClient
 from pydantic import BaseModel, Field
 
-from utils import Page, make_params, parse_int
+from utils import make_params, parse_int
 
-
-type SearchType = Literal['shiwen', 'mingju', 'book', 'author'] | None
 
 FENLEI_SELECTOR = '.main3>.left>div:has(img[src="../img/search/{fenlei}.png"])'
 SHIWEN_BEFORE_SELECTOR = 'img[src="../img/book/shiwen.png"]'
 MINGJU_BEFORE_SELECTOR = 'img[src="../img/book/mingjuBefor.png"]'
 
+type SearchType = Literal['shiwen', 'mingju', 'book', 'author']
+
 
 class Zhuanti(BaseModel):
+    selector: ClassVar[str] = '.zhuanti-item'
+
     href: str | None = None
     title: str | None = None
     content: str | None = None
@@ -33,6 +37,8 @@ class Zhuanti(BaseModel):
 
 
 class Shiwen(BaseModel):
+    selector: ClassVar[str] = '.zongheShiwen'
+
     href: str | None = None
     title: str | None = None
     source: str | None = None
@@ -57,6 +63,8 @@ class Shiwen(BaseModel):
 
 
 class Mingju(BaseModel):
+    selector: ClassVar[str] = '.mingju-item'
+
     href: str | None = None
     content: str | None = None
     source: str | None = None
@@ -77,6 +85,8 @@ class Mingju(BaseModel):
 
 
 class Book(BaseModel):
+    selector: ClassVar[str] = '.zongheShiwen'
+
     href: str | None = None
     title: str | None = None
     alias: str | None = None
@@ -107,6 +117,8 @@ class Book(BaseModel):
 
 
 class Author(BaseModel):
+    selector: ClassVar[str] = '.zongheShiwen'
+
     href: str | None = None
     name: str | None = None
     avatar: str | None = None
@@ -135,52 +147,10 @@ class Author(BaseModel):
         return author
 
 
-class SearchResult(BaseModel):
+class SearchParams(BaseModel):
     keyword: str
-    type: SearchType = None
+    type: SearchType | None = None
     page: int | None = None
-    zhuanti: Page[Zhuanti] | None = None
-    shiwen: Page[Shiwen] | None = None
-    mingju: Page[Mingju] | None = None
-    book: Page[Book] | None = None
-    author: Page[Author] | None = None
-
-    def parse_more(self, tag: Tag) -> bool:
-        return (
-            tag.select_one('.viewMore') is not None
-            if self.type is None else
-            tag.select_one('.amore') is not None
-        )
-
-    def parse_zhuanti(self, tag: Tag):
-        return Page(
-            data=map(Zhuanti.from_tag, tag.select('.zhuanti-item')),
-            more=self.parse_more(tag)
-        )
-
-    def parse_shiwen(self, tag: Tag):
-        return Page(
-            data=map(Shiwen.from_tag, tag.select('.zongheShiwen')),
-            more=self.parse_more(tag)
-        )
-
-    def parse_mingju(self, tag: Tag):
-        return Page(
-            data=map(Mingju.from_tag, tag.select('.mingju-item')),
-            more=self.parse_more(tag)
-        )
-
-    def parse_book(self, tag: Tag):
-        return Page(
-            data=map(Book.from_tag, tag.select('.zongheShiwen')),
-            more=self.parse_more(tag)
-        )
-
-    def parse_author(self, tag: Tag):
-        return Page(
-            data=map(Author.from_tag, tag.select('.zongheShiwen')),
-            more=self.parse_more(tag)
-        )
 
     async def search(self, client: AsyncClient):
         resp = await client.get('/search.aspx', params=make_params(
@@ -189,18 +159,50 @@ class SearchResult(BaseModel):
             page=self.page
         ))
         soup = BeautifulSoup(resp.text, 'lxml')
-        if self.type is None:
-            for field in ['zhuanti', 'shiwen', 'mingju', 'book', 'author']:
-                if tag := soup.select_one(FENLEI_SELECTOR.format(fenlei=field)):
-                    setattr(self, field, getattr(self, f'parse_{field}')(tag))
-        elif self.type == 'shiwen':
-            self.zhuanti = self.parse_zhuanti(soup)
-            self.shiwen = self.parse_shiwen(soup)
-        elif self.type == 'mingju':
-            self.zhuanti = self.parse_zhuanti(soup)
-            self.mingju = self.parse_mingju(soup)
-        elif self.type == 'book':
-            self.book = self.parse_book(soup)
-        elif self.type == 'author':
-            self.author = self.parse_author(soup)
-        return self
+        return SearchResult.from_tag(self.type, soup)
+
+
+class FromTag(Protocol):
+    selector: ClassVar[str]
+
+    @classmethod
+    def from_tag(cls, tag: Tag) -> Self:
+        ...
+
+
+def parse_tags[T: FromTag](cls: type[T], tag: Tag) -> list[T]:
+    return [cls.from_tag(tag) for tag in tag.select(cls.selector)]
+
+
+ITEM_TYPE_TO_CLASS: dict[Literal[SearchType, "zhuanti"], type[FromTag]] = {
+    'zhuanti': Zhuanti,
+    'shiwen': Shiwen,
+    'mingju': Mingju,
+    'book': Book,
+    'author': Author,
+}
+
+
+class SearchResult(BaseModel):
+    zhuanti: list[Zhuanti] | None = None
+    shiwen: list[Shiwen] | None = None
+    mingju: list[Mingju] | None = None
+    book: list[Book] | None = None
+    author: list[Author] | None = None
+    more: bool = False
+
+    @classmethod
+    def from_tag(cls, type: SearchType | None, tag: Tag):
+        result = cls()
+        if type is None:
+            result.more = tag.select_one('.viewMore') is not None
+            for field in ITEM_TYPE_TO_CLASS.keys():
+                selector = FENLEI_SELECTOR.format(fenlei=field)
+                if fenlei := tag.select_one(selector):
+                    items = parse_tags(ITEM_TYPE_TO_CLASS[field], fenlei)
+                    setattr(result, field, items)
+            return result
+        result.zhuanti = parse_tags(Zhuanti, tag)
+        setattr(result, type, parse_tags(ITEM_TYPE_TO_CLASS[type], tag))
+        result.more = tag.select_one('.amore') is not None
+        return result
