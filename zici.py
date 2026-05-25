@@ -77,9 +77,12 @@ class ZiciSearchResult(BaseModel):
         if pinyinStr := tag.select_one('.pingyinStr'):
             result.pinyin = pinyinStr.get_text(strip=True)
         for infoItem in tag.select('.infoItem'):
-            if (key := infoItem.select_one('.dinyi')) and\
-                    (value := infoItem.select_one('.dinyiZhi')):
-                result.info[key.text] = value.text
+            if (dinyi := infoItem.select_one('.dinyi')) and\
+                    (zhi := infoItem.select_one('.dinyiZhi')):
+                key = dinyi.get_text(strip=True)
+                value = zhi.get_text(strip=True)
+                if key not in result.info:
+                    result.info[key] = value
         result.data = [
             DetailShiyi.from_tag(tag)
             if tag.select_one('.yinzheng-item') is not None else
