@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 class Example(BaseModel):
     content: str
     source: str | None = None
+    comment: str | None = None
 
 
 class Shiyi(BaseModel):
@@ -50,13 +51,15 @@ class DetailShiyi(Shiyi):
         result = super().from_tag(tag)
         for yinzheng in tag.select('.yinzheng-item'):
             if zuci := yinzheng.select_one('.zuci'):
+                if zhu := zuci.select_one('.zhu'):
+                    zhu.extract()
                 content = zuci.get_text(strip=True)
-                source = yinzheng.select_one('.sourceYinzheng')
-                result.examples.append(Example(
-                    content=content,
-                    source=source.get_text(strip=True).removeprefix('——')
-                    if source else None,
-                ))
+                example = Example(content=content)
+                if source := yinzheng.select_one('.sourceYinzheng'):
+                    example.source = source.get_text().removeprefix('——')
+                if comment := yinzheng.select_one('.zhushiContent'):
+                    example.comment = comment.get_text(strip=True)
+                result.examples.append(example)
         return result
 
 
