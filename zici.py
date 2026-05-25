@@ -9,7 +9,7 @@ class Example(BaseModel):
     source: str | None = None
 
 
-class Definition(BaseModel):
+class Shiyi(BaseModel):
     cixing: str | None = None
     jieshi: str | None = None
 
@@ -23,7 +23,7 @@ class Definition(BaseModel):
         return result
 
 
-class BasicDefinition(Definition):
+class BasicShiyi(Shiyi):
     extras: dict[str, str] = Field(default_factory=dict)
 
     @classmethod
@@ -42,7 +42,7 @@ class BasicDefinition(Definition):
         return result
 
 
-class DetialDefinition(Definition):
+class DetailShiyi(Shiyi):
     examples: list[Example] = Field(default_factory=list)
 
     @classmethod
@@ -63,8 +63,7 @@ class DetialDefinition(Definition):
 class ZiciSearchResult(BaseModel):
     name: str | None = None
     pinyin: str | None = None
-    definitions: list[BasicDefinition |
-                      DetialDefinition] = Field(default_factory=list)
+    data: list[BasicShiyi | DetailShiyi] = Field(default_factory=list)
 
     @classmethod
     def from_tag(cls, tag: Tag) -> Self:
@@ -73,10 +72,10 @@ class ZiciSearchResult(BaseModel):
             result.name = cidianNames.get_text(strip=True)
         if pinyinStr := tag.select_one('.pingyinStr'):
             result.pinyin = pinyinStr.get_text(strip=True)
-        result.definitions = [
-            DetialDefinition.from_tag(tag)
+        result.data = [
+            DetailShiyi.from_tag(tag)
             if tag.select_one('.yinzheng-item') is not None else
-            BasicDefinition.from_tag(tag)
+            BasicShiyi.from_tag(tag)
             for tag in tag.select('.shiyiContent')
         ]
         return result
