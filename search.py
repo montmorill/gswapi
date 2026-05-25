@@ -7,9 +7,29 @@ from pydantic import BaseModel, Field
 from utils import Page, make_params, parse_int
 
 
+type SearchType = Literal['shiwen', 'mingju', 'book', 'author'] | None
+
 FENLEI_SELECTOR = '.main3>.left>div:has(img[src="../img/search/{fenlei}.png"])'
 SHIWEN_BEFORE_SELECTOR = 'img[src="../img/book/shiwen.png"]'
 MINGJU_BEFORE_SELECTOR = 'img[src="../img/book/mingjuBefor.png"]'
+
+
+class Zhuanti(BaseModel):
+    href: str | None = None
+    title: str | None = None
+    content: str | None = None
+
+    @classmethod
+    def from_tag(cls, tag: Tag) -> Self:
+        zhuanti = cls()
+        if timu := tag.select_one('.timu'):
+            if (timu.parent and 'href' in timu.parent.attrs
+                    and type(timu.parent.attrs['href']) == str):
+                zhuanti.href = timu.parent.attrs['href']
+            zhuanti.title = timu.text.strip()
+        if content := tag.select_one('.content'):
+            zhuanti.content = content.text.strip()
+        return zhuanti
 
 
 class Shiwen(BaseModel):
@@ -113,27 +133,6 @@ class Author(BaseModel):
         if contson := tag.select_one('.contson'):
             author.content = contson.text.strip()
         return author
-
-
-class Zhuanti(BaseModel):
-    href: str | None = None
-    title: str | None = None
-    content: str | None = None
-
-    @classmethod
-    def from_tag(cls, tag: Tag) -> Self:
-        zhuanti = cls()
-        if timu := tag.select_one('.timu'):
-            if (timu.parent and 'href' in timu.parent.attrs
-                    and type(timu.parent.attrs['href']) == str):
-                zhuanti.href = timu.parent.attrs['href']
-            zhuanti.title = timu.text.strip()
-        if content := tag.select_one('.content'):
-            zhuanti.content = content.text.strip()
-        return zhuanti
-
-
-type SearchType = Literal['shiwen', 'mingju', 'book', 'author'] | None
 
 
 class SearchResult(BaseModel):
