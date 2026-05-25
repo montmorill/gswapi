@@ -1,10 +1,13 @@
 import json
 from contextlib import asynccontextmanager
 
+from bs4 import BeautifulSoup
 from fastapi import FastAPI
 from httpx import AsyncClient
 
-from search import SearchResult, SearchParams, SearchType
+from search import SearchResult, SearchType
+from utils import make_params
+from zici import ZiciSearchResult
 
 
 @asynccontextmanager
@@ -27,7 +30,13 @@ app = FastAPI(lifespan=lifespan)
 async def search(
     keyword: str,
     type: SearchType | None = None,
-    page: int | None = None
+    page: int | None = None,
 ) -> SearchResult:
-    params = SearchParams(keyword=keyword, type=type, page=page)
-    return await params.search(app.state.client)
+    client: AsyncClient = app.state.client
+    resp = await client.get('/search.aspx', params=make_params(
+        value=keyword,
+        type=type,
+        page=page
+    ))
+    soup = BeautifulSoup(resp.text, 'lxml')
+    return SearchResult.from_tag(soup, type=type)

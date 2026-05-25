@@ -1,12 +1,9 @@
-from functools import partial
-import re
 from typing import ClassVar, Literal, Protocol, Self
 
-from bs4 import BeautifulSoup, Tag
-from httpx import AsyncClient
+from bs4 import Tag
 from pydantic import BaseModel, Field
 
-from utils import make_params, parse_int
+from utils import parse_int
 
 
 FENLEI_SELECTOR = '.main3>.left>div:has(img[src="../img/search/{fenlei}.png"])'
@@ -147,21 +144,6 @@ class Author(BaseModel):
         return author
 
 
-class SearchParams(BaseModel):
-    keyword: str
-    type: SearchType | None = None
-    page: int | None = None
-
-    async def search(self, client: AsyncClient):
-        resp = await client.get('/search.aspx', params=make_params(
-            value=self.keyword,
-            type=self.type,
-            page=self.page
-        ))
-        soup = BeautifulSoup(resp.text, 'lxml')
-        return SearchResult.from_tag(self.type, soup)
-
-
 class FromTag(Protocol):
     selector: ClassVar[str]
 
@@ -192,7 +174,7 @@ class SearchResult(BaseModel):
     more: bool = False
 
     @classmethod
-    def from_tag(cls, type: SearchType | None, tag: Tag):
+    def from_tag(cls, tag: Tag, type: SearchType | None = None):
         result = cls()
         if type is None:
             result.more = tag.select_one('.viewMore') is not None
